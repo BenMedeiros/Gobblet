@@ -101,32 +101,26 @@ class RandomPlayer(Player):
         
         possible_moves = []
         
-        # Add place moves for available pieces
+        # Add place moves for available pieces (using new Gobblet rules)
         if available_pieces:
-            valid_positions = board.get_valid_moves(self.color)
             for piece in available_pieces:
+                valid_positions = board.get_valid_moves_for_new_piece(self.color, piece.size)
                 for pos in valid_positions:
-                    # Check if piece can actually be placed at this position
-                    existing_piece = board.get_top_piece(pos[0], pos[1])
-                    if existing_piece is None or piece.can_cover(existing_piece):
-                        possible_moves.append(("place", {
-                            "piece": piece,
-                            "position": pos
-                        }))
+                    possible_moves.append(("place", {
+                        "piece": piece,
+                        "position": pos
+                    }))
         
-        # Add move moves for pieces on board
+        # Add move moves for pieces on board (existing pieces have more flexibility)
         for piece, current_pos in pieces_on_board:
-            valid_positions = board.get_valid_moves(self.color)
+            valid_positions = board.get_valid_moves_for_existing_piece(self.color, piece.size)
             for new_pos in valid_positions:
                 if new_pos != current_pos:
-                    # Check if piece can be placed at new position
-                    existing_piece = board.get_top_piece(new_pos[0], new_pos[1])
-                    if existing_piece is None or piece.can_cover(existing_piece):
-                        possible_moves.append(("move", {
-                            "piece": piece,
-                            "from_position": current_pos,
-                            "to_position": new_pos
-                        }))
+                    possible_moves.append(("move", {
+                        "piece": piece,
+                        "from_position": current_pos,
+                        "to_position": new_pos
+                    }))
         
         if not possible_moves:
             # No valid moves available
@@ -260,18 +254,16 @@ class GreedyPlayer(Player):
             available_pieces.sort(key=lambda p: p.size.value, reverse=True)
             
             for piece in available_pieces:
-                # Try center positions first
-                for pos in center_positions:
-                    existing_piece = board.get_top_piece(pos[0], pos[1])
-                    if existing_piece is None or piece.can_cover(existing_piece):
-                        return ("place", {"piece": piece, "position": pos})
+                # Try center positions first (using new piece rules)
+                valid_positions = board.get_valid_moves_for_new_piece(self.color, piece.size)
+                center_valid = [pos for pos in center_positions if pos in valid_positions]
                 
-                # Then try any valid position
-                valid_positions = board.get_valid_moves(self.color)
+                for pos in center_valid:
+                    return ("place", {"piece": piece, "position": pos})
+                
+                # Then try any valid position for new pieces
                 for pos in valid_positions:
-                    existing_piece = board.get_top_piece(pos[0], pos[1])
-                    if existing_piece is None or piece.can_cover(existing_piece):
-                        return ("place", {"piece": piece, "position": pos})
+                    return ("place", {"piece": piece, "position": pos})
         
         # Fall back to random move
         random_player = RandomPlayer(self.color)

@@ -135,8 +135,8 @@ class GobbletGame:
         # Get piece that might be captured
         captured_piece = self.board.get_top_piece(row, col)
         
-        # Try to place the piece
-        if self.board.place_piece(piece, row, col):
+        # Try to place the piece (this is a new piece from off-board)
+        if self.board.place_piece(piece, row, col, is_new_piece=True):
             # Record the move
             self.move_tracker.record_move(
                 player_color=self.current_player.color,
@@ -182,8 +182,8 @@ class GobbletGame:
                 self.board.place_piece(removed_piece, from_row, from_col)
             return False
         
-        # Try to place piece at new position
-        if self.board.place_piece(piece, to_row, to_col):
+        # Try to place piece at new position (this is moving an existing piece)
+        if self.board.place_piece(piece, to_row, to_col, is_new_piece=False):
             # Record the move
             self.move_tracker.record_move(
                 player_color=self.current_player.color,
@@ -196,7 +196,7 @@ class GobbletGame:
             return True
         else:
             # Failed to place at new position, put piece back
-            self.board.place_piece(piece, from_row, from_col)
+            self.board.place_piece(piece, from_row, from_col, is_new_piece=False)
             return False
     
     def _switch_player(self) -> None:
