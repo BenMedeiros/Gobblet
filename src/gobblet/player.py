@@ -161,6 +161,7 @@ class GreedyPlayer(Player):
     def _find_blocking_move(self, board: Board) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Find a move that blocks the opponent from winning."""
         opponent_color = PieceColor.DARK if self.color == PieceColor.LIGHT else PieceColor.LIGHT
+        blocking_moves = []
         
         # Find where opponent could win
         for row in range(board.size):
@@ -169,22 +170,25 @@ class GreedyPlayer(Player):
                 available_pieces = self.get_available_pieces()
                 for piece in available_pieces:
                     if self._would_block_win(board, piece, (row, col), opponent_color):
-                        return ("place", {"piece": piece, "position": (row, col)})
+                        blocking_moves.append(("place", {"piece": piece, "position": (row, col)}))
                 
                 # Try moving our pieces to block
                 pieces_on_board = self.get_pieces_on_board(board)
                 for piece, current_pos in pieces_on_board:
                     if self._would_block_win(board, piece, (row, col), opponent_color):
-                        return ("move", {
+                        blocking_moves.append(("move", {
                             "piece": piece,
                             "from_position": current_pos,
                             "to_position": (row, col)
-                        })
+                        }))
         
-        return None
+        # Return random blocking move if multiple exist
+        return random.choice(blocking_moves) if blocking_moves else None
     
     def _find_move_for_color(self, board: Board, color: PieceColor) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Find a winning move for the specified color."""
+        winning_moves = []
+        
         # Check all possible positions
         for row in range(board.size):
             for col in range(board.size):
@@ -193,19 +197,20 @@ class GreedyPlayer(Player):
                     available_pieces = self.get_available_pieces()
                     for piece in available_pieces:
                         if self._would_win(board, piece, (row, col)):
-                            return ("place", {"piece": piece, "position": (row, col)})
+                            winning_moves.append(("place", {"piece": piece, "position": (row, col)}))
                     
                     # Try moving pieces on board
                     pieces_on_board = self.get_pieces_on_board(board)
                     for piece, current_pos in pieces_on_board:
                         if self._would_win(board, piece, (row, col)):
-                            return ("move", {
+                            winning_moves.append(("move", {
                                 "piece": piece,
                                 "from_position": current_pos,
                                 "to_position": (row, col)
-                            })
+                            }))
         
-        return None
+        # Return random winning move if multiple exist
+        return random.choice(winning_moves) if winning_moves else None
     
     def _would_win(self, board: Board, piece: Piece, position: Tuple[int, int]) -> bool:
         """Check if placing/moving a piece would result in a win."""
@@ -250,20 +255,33 @@ class GreedyPlayer(Player):
         
         available_pieces = self.get_available_pieces()
         if available_pieces:
-            # Prefer larger pieces
-            available_pieces.sort(key=lambda p: p.size.value, reverse=True)
+            # Randomize piece order but still prefer larger pieces (70% of the time)
+            if random.random() < 0.7:
+                available_pieces.sort(key=lambda p: p.size.value, reverse=True)
+            else:
+                random.shuffle(available_pieces)
+            
+            strategic_moves = []
             
             for piece in available_pieces:
                 # Try center positions first (using new piece rules)
                 valid_positions = board.get_valid_moves_for_new_piece(self.color, piece.size)
                 center_valid = [pos for pos in center_positions if pos in valid_positions]
                 
+                # Add center moves to strategic options
                 for pos in center_valid:
-                    return ("place", {"piece": piece, "position": pos})
+                    strategic_moves.append(("place", {"piece": piece, "position": pos}))
                 
-                # Then try any valid position for new pieces
-                for pos in valid_positions:
-                    return ("place", {"piece": piece, "position": pos})
+                # Add other valid positions as backup
+                other_positions = [pos for pos in valid_positions if pos not in center_valid]
+                for pos in other_positions:
+                    strategic_moves.append(("place", {"piece": piece, "position": pos}))
+            
+            # If we have strategic moves, pick randomly among the best options
+            if strategic_moves:
+                # Prefer first quarter of moves (which include center positions)
+                best_moves = strategic_moves[:max(1, len(strategic_moves) // 4)]
+                return random.choice(best_moves)
         
         # Fall back to random move
         random_player = RandomPlayer(self.color)
@@ -311,6 +329,8 @@ class DefensivePlayer(Player):
     
     def _find_winning_move(self, board: Board) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Find immediate winning move."""
+        winning_moves = []
+        
         for row in range(board.size):
             for col in range(board.size):
                 available_pieces = self.get_available_pieces()
@@ -318,7 +338,7 @@ class DefensivePlayer(Player):
                     test_board = board.copy()
                     if test_board.place_piece(piece, row, col):
                         if test_board.check_winner() == self.color:
-                            return ("place", {"piece": piece, "position": (row, col)})
+                            winning_moves.append(("place", {"piece": piece, "position": (row, col)}))
                 
                 pieces_on_board = self.get_pieces_on_board(board)
                 for piece, current_pos in pieces_on_board:
@@ -326,18 +346,20 @@ class DefensivePlayer(Player):
                     test_board.remove_piece(current_pos[0], current_pos[1])
                     if test_board.place_piece(piece, row, col):
                         if test_board.check_winner() == self.color:
-                            return ("move", {
+                            winning_moves.append(("move", {
                                 "piece": piece,
                                 "from_position": current_pos,
                                 "to_position": (row, col)
-                            })
+                            }))
         
-        return None
+        # Return random winning move if multiple exist
+        return random.choice(winning_moves) if winning_moves else None
     
     def _find_blocking_move(self, board: Board) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Find move that blocks opponent."""
         # Similar to greedy player but more thorough
         opponent_color = PieceColor.DARK if self.color == PieceColor.LIGHT else PieceColor.LIGHT
+        blocking_moves = []
         
         # Check all positions for potential opponent wins
         for row in range(board.size):
@@ -349,9 +371,10 @@ class DefensivePlayer(Player):
                     for piece in available_pieces:
                         existing_piece = board.get_top_piece(row, col)
                         if existing_piece is None or piece.can_cover(existing_piece):
-                            return ("place", {"piece": piece, "position": (row, col)})
+                            blocking_moves.append(("place", {"piece": piece, "position": (row, col)}))
         
-        return None
+        # Return random blocking move if multiple exist
+        return random.choice(blocking_moves) if blocking_moves else None
     
     def _opponent_could_win_here(self, board: Board, position: Tuple[int, int], opponent_color: PieceColor) -> bool:
         """Check if opponent could win by playing at this position."""
@@ -375,14 +398,34 @@ class DefensivePlayer(Player):
         
         available_pieces = self.get_available_pieces()
         if available_pieces:
-            # Prefer medium to large pieces for defense
-            available_pieces.sort(key=lambda p: p.size.value, reverse=True)
+            # Sometimes randomize piece selection for variety (30% chance)
+            if random.random() < 0.3:
+                random.shuffle(available_pieces)
+            else:
+                # Prefer medium to large pieces for defense
+                available_pieces.sort(key=lambda p: p.size.value, reverse=True)
             
+            defensive_moves = []
+            
+            # Collect all valid defensive moves
             for piece in available_pieces:
-                for pos in strategic_positions:
-                    existing_piece = board.get_top_piece(pos[0], pos[1])
-                    if existing_piece is None or piece.can_cover(existing_piece):
-                        return ("place", {"piece": piece, "position": pos})
+                # Check new piece placement rules
+                valid_positions = board.get_valid_moves_for_new_piece(self.color, piece.size)
+                
+                # Prioritize strategic positions that are also valid
+                strategic_valid = [pos for pos in strategic_positions if pos in valid_positions]
+                for pos in strategic_valid:
+                    defensive_moves.append(("place", {"piece": piece, "position": pos}))
+                
+                # Add other valid positions as backup
+                other_valid = [pos for pos in valid_positions if pos not in strategic_valid]
+                for pos in other_valid:
+                    defensive_moves.append(("place", {"piece": piece, "position": pos}))
+            
+            # Pick from the best defensive moves (first third of options)
+            if defensive_moves:
+                best_moves = defensive_moves[:max(1, len(defensive_moves) // 3)]
+                return random.choice(best_moves)
         
         # Fall back to any valid move
         return self._make_any_valid_move(board)
